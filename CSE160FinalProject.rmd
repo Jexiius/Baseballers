@@ -1,0 +1,75 @@
+
+Reading in the file & cleaning data
+```{r}
+library(dplyr)
+dataSet <- read.csv("mlb_teams.csv")
+set.seed(1)
+dataSetRandom <- dataSet[sample(1:nrow(dataSet)), ]
+cleanRandom <- dataSetRandom[ , colSums(is.na(dataSetRandom))==0]
+cleanRandom$id <- 1:nrow(cleanRandom)
+cleanRandom$winPercentage <- cleanRandom$wins/(cleanRandom$wins + cleanRandom$losses)
+cleanRandom$above500 <- ifelse(cleanRandom$winPercentage>.50, 1, 0)
+train <- cleanRandom %>% dplyr::sample_frac(.70)
+test <- dplyr::anti_join(cleanRandom, train, by = 'id')
+```
+
+Decision Tree
+```{r}
+library(rpart)
+library(rpart.plot)
+fit <- rpart(winPercentage~ at_bats + hits + doubles + triples + homeruns + walks + earned_run_average + complete_games + shutouts + saves + outs_pitches + hits_allowed + homeruns_allowed + walks_allowed + strikeouts_by_pitchers + errors + double_plays+ fielding_percentage, data = train, method = "anova")
+rpart.plot(fit)
+predicitonDT <- predict(fit, data = test, type = "prob")
+```
+SVM
+```{r}
+library(e1071)
+# Creating the model from training data
+fitsvm <- svm(formula = above500 ~ at_bats + hits + doubles + triples + homeruns + walks + 
+                earned_run_average + complete_games + shutouts + saves + outs_pitches + 
+                hits_allowed + homeruns_allowed + walks_allowed + strikeouts_by_pitchers + 
+                errors + double_plays + fielding_percentage, data = train, kernel = 'linear')
+
+# Predicting the outcomes of the test data using the model
+predictSVM <- predict(fitsvm, newdata = test, type = "response")
+predictClassSVM <- ifelse(predictSVM > 0.5, 1, 0)
+
+# Calculating True/False Positives/Negatives
+TP <- sum(predictClassSVM == 1 & test$above500 == 1)
+FP <- sum(predictClassSVM == 1 & test$above500 == 0)
+TN <- sum(predictClassSVM == 0 & test$above500 == 1)
+FN <- sum(predictClassSVM == 0 & test$above500 == 1)
+
+# Calculating Precision
+precision <- TP / (TP + FP)
+print(paste("Precision:", precision))
+
+# Calculating Accuracy
+accuracy = (TP + TN)/(TP + TN + FP + FN)
+print(paste("Accuracy:", accuracy))
+
+# Calculating Recall
+recall = TP / (TP + FN)
+print(paste("Recall:", recall))
+
+
+# Creating the ROC Curve
+library(pROC)
+rocCurve <- roc(factor(test$above500), predictSVM)
+plot(rocCurve)
+cm <- data.frame(c(TP, FP), c(TN, FN))
+print(cm)
+
+# Finding the AUC
+library(pROC)
+rocCurve <- roc(factor(test$above500), predictSVM)
+aucValue <- auc(rocCurve) 
+print(paste("AUC:", aucValue))  
+plot(rocCurve)  # Plot ROC Curve
+
+print(TP)
+print(FP)
+print(TN)
+print(FN)
+```
+
